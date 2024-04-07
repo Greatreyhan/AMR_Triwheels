@@ -1,0 +1,14 @@
+../Core/Src/Motor.c:10:6:agv_run_motor	19
+../Core/Src/Motor.c:83:6:agv_play_rotate	1
+../Core/Src/Motor.c:90:6:agv_play_y	1
+../Core/Src/Motor.c:97:6:agv_play_x	1
+../Core/Src/Motor.c:104:6:agv_play_cross_A	1
+../Core/Src/Motor.c:113:6:agv_play_cross_B	2
+../Core/Src/Motor.c:128:6:agv_stop	1
+../Core/Src/Motor.c:133:6:agv_stop_all	1
+../Core/Src/Motor.c:140:6:agv_encoder_start	1
+../Core/Src/Motor.c:146:6:agv_move_rotate	13
+../Core/Src/Motor.c:167:6:agv_move_y	13
+../Core/Src/Motor.c:188:6:agv_move_x	13
+../Core/Src/Motor.c:209:6:agv_move_cross_A	9
+../Core/Src/Motor.c:230:6:agv_move_cross_B	9

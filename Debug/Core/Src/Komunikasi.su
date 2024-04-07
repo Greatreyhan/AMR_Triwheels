@@ -1,0 +1,12 @@
+../Core/Src/Komunikasi.c:15:6:komunikasi_init	16	static
+../Core/Src/Komunikasi.c:19:16:checksum_generator	24	static
+../Core/Src/Komunikasi.c:25:6:tx_ping	32	static
+../Core/Src/Komunikasi.c:33:6:tx_steady	32	static
+../Core/Src/Komunikasi.c:41:6:tx_move	32	static
+../Core/Src/Komunikasi.c:49:6:tx_req	32	static
+../Core/Src/Komunikasi.c:57:6:tx_send	32	static
+../Core/Src/Komunikasi.c:65:6:tx_send_all	40	static
+../Core/Src/Komunikasi.c:73:6:rx_start	8	static
+../Core/Src/Komunikasi.c:77:6:rx_start_get	8	static
+../Core/Src/Komunikasi.c:81:6:rx_feedback	16	static
+../Core/Src/Komunikasi.c:92:6:rx_get	48	static

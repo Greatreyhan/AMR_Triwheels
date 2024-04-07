@@ -1,0 +1,2 @@
+../Core/Src/Aktuator.c:9:6:aktuator_up	8	static
+../Core/Src/Aktuator.c:16:6:aktuator_down	8	static
