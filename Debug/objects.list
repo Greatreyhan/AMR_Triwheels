@@ -1,5 +1,6 @@
 "./Core/Src/BNO08X.o"
 "./Core/Src/Motor.o"
+"./Core/Src/PID_Driver.o"
 "./Core/Src/main.o"
 "./Core/Src/stm32f4xx_hal_msp.o"
 "./Core/Src/stm32f4xx_it.o"

@@ -23,7 +23,9 @@
 /* USER CODE BEGIN Includes */
 #include "Motor.h"
 #include "BNO08X.h"
+#include "PID_driver.h"
 #include <stdlib.h>
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -62,8 +64,14 @@ extern motor_t motor_A, motor_B, motor_C;
 //---------------- ENCODER DECLARATION ---------------------//
 extern encoder_t encoder_A, encoder_B, encoder_C;
 
+//---------------- KINEMATIC DECLARATION ---------------------//
 kinematic_t kinematic;
-double res;
+
+//---------------- PID DECLARATION ---------------------//
+PIDController pid_vy;
+PIDController pid_vx;
+PIDController pid_vt;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -80,7 +88,7 @@ static void MX_USART6_UART_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_TIM5_Init(void);
 /* USER CODE BEGIN PFP */
-
+bool run_to_point(double sx, double sy, double st, double error);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -208,6 +216,25 @@ int main(void)
   // STOP ALL Motor
   agv_stop_all(motor_A, motor_B, motor_C);
 
+  //+++++++++++++++++++++++++++++++++ PID INITIALIZATION ++++++++++++++++++++++++++++++//
+  // Y Axis
+  pid_vy.Kp = 1;			pid_vy.Ki = 0;				pid_vy.Kd = 0;
+  pid_vy.limMax = 500; 		pid_vy.limMin = -500; 		pid_vy.limMaxInt = 5; 	pid_vy.limMinInt = -5;
+  pid_vy.T_sample = 0.01;
+  PIDController_Init(&pid_vy);
+
+  // X Axis
+  pid_vx.Kp = 1;			pid_vx.Ki = 0;				pid_vx.Kd = 0;
+  pid_vx.limMax = 500; 		pid_vx.limMin = -500; 		pid_vx.limMaxInt = 5; 	pid_vx.limMinInt = -5;
+  pid_vx.T_sample = 0.01;
+  PIDController_Init(&pid_vx);
+
+  // Orientation
+  pid_vt.Kp = 1;			pid_vt.Ki = 0;				pid_vt.Kd = 0;
+  pid_vt.limMax = 500; 		pid_vt.limMin = -500; 		pid_vt.limMaxInt = 5; 	pid_vt.limMinInt = -5;
+  pid_vt.T_sample = 0.01;
+  PIDController_Init(&pid_vt);
+
   //+++++++++++++++++++++++++++++++++ BNO08X INITIALIZATION ++++++++++++++++++++++++++++++//
   BNO08X_Init(&huart6);
 
@@ -220,9 +247,9 @@ int main(void)
 //  agv_reset_all(motor_A, motor_B, motor_C);
 //  agv_inverse_kinematic(200, 0, 0, motor_A, motor_B, motor_C);
 //  HAL_Delay(2000);
-  agv_reset_all(motor_A, motor_B, motor_C);
-  agv_inverse_kinematic(-200, 0, 0, motor_A, motor_B, motor_C);
-  HAL_Delay(2000);
+//  agv_reset_all(motor_A, motor_B, motor_C);
+//  agv_inverse_kinematic(-200, 0, 0, motor_A, motor_B, motor_C);
+//  HAL_Delay(2000);
 //  agv_reset_all(motor_A, motor_B, motor_C);
 //  agv_inverse_kinematic(0, 0, 200, motor_A, motor_B, motor_C);
 //  HAL_Delay(2000);
@@ -236,7 +263,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-
+	  run_to_point(500,500,0,5);
 //	  agv_stop_all(motor_A, motor_B, motor_C);
 //	  agv_run_motor(motor_A, 200);
 //	  HAL_Delay(2000);
@@ -820,7 +847,22 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+bool run_to_point(double sx, double sy, double st, double error){
+	if(abs(kinematic.Sx - sx) < error && abs(kinematic.Sy - sy) < error && abs(kinematic.St - st) < error){
+		agv_reset_all(motor_A, motor_B, motor_C);
+		agv_stop_all(motor_A, motor_B, motor_C);
+		return true;
+	}
+	else{
+		PIDController_Update(&pid_vx, sx, kinematic.Sx);
+		PIDController_Update(&pid_vy, sy, kinematic.Sy);
+		PIDController_Update(&pid_vt, st, kinematic.St);
+		agv_reset_all(motor_A, motor_B, motor_C);
+		agv_inverse_kinematic(pid_vx.out, pid_vy.out, pid_vt.out, motor_A, motor_B, motor_C);
+		return false;
+	}
 
+}
 /* USER CODE END 4 */
 
 /**
