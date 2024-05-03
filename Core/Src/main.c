@@ -26,6 +26,7 @@
 #include "PID_driver.h"
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -56,6 +57,7 @@ TIM_HandleTypeDef htim11;
 
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart6;
+DMA_HandleTypeDef hdma_usart1_rx;
 
 /* USER CODE BEGIN PV */
 //---------------- MOTOR DECLARATION ---------------------//
@@ -71,12 +73,19 @@ kinematic_t kinematic;
 PIDController pid_vy;
 PIDController pid_vx;
 PIDController pid_vt;
+PIDController pid_yaw;
 
+//---------------- Bluetooth DECLARATION ---------------------//
+uint8_t rxBluetooth[15];
+
+//---------------- BNO08X DECLARATION ---------------------//
+BNO08X_Typedef BNO08X_sensor;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM3_Init(void);
@@ -89,11 +98,18 @@ static void MX_USART1_UART_Init(void);
 static void MX_TIM5_Init(void);
 /* USER CODE BEGIN PFP */
 bool run_to_point(double sx, double sy, double st, double error);
+bool handle_heading(int16_t heading, int16_t error);
+bool run_to_point_orientation(double sx, double sy, uint16_t heading, double error);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 uint32_t vt = 0;
+int xdata = 0;
+int ydata = 0;
+int tdata = 0;
+uint8_t is_started = 0;
+
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
 	if(htim->Instance  == TIM1){
@@ -118,9 +134,36 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 	kinematic.Sy = agv_kinematic_Sy(encoder_A.position,encoder_B.position,encoder_C.position);
 	kinematic.St = agv_kinematic_St(encoder_A.position,encoder_B.position,encoder_C.position);
 }
+
+
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-	BNO08X_GetData(&BNO08x_Data);
+	is_started = 1;
+	if(huart->Instance == USART1){
+		if(rxBluetooth[0] == 'A' && rxBluetooth[1] == 'A'){
+			uint8_t holder[3];
+			holder[0] = rxBluetooth[3];
+			holder[1] = rxBluetooth[4];
+			holder[2] = rxBluetooth[5];
+			xdata = rxBluetooth[2] == 'N' ? atoi((char *)holder)*(-1) : atoi((char *)holder);
+			holder[0] = rxBluetooth[7];
+			holder[1] = rxBluetooth[8];
+			holder[2] = rxBluetooth[9];
+			ydata = rxBluetooth[6] == 'N' ? atoi((char *)holder)*(-1) : atoi((char *)holder);
+			holder[0] = rxBluetooth[11];
+			holder[1] = rxBluetooth[12];
+			holder[2] = rxBluetooth[13];
+			tdata = rxBluetooth[10] == 'N' ? atoi((char *)holder)*(-1) : atoi((char *)holder);
+		}
+		HAL_UART_Receive_DMA(&huart1, rxBluetooth, sizeof(rxBluetooth));
+		HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+	}
+	if (huart == &huart6) {
+
+		// Callback for BNO08X Data
+		BNO08X_GetData(&BNO08x_Data);
+
+	}
 	HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
 }
 
@@ -154,6 +197,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_TIM1_Init();
   MX_TIM2_Init();
   MX_TIM3_Init();
@@ -218,75 +262,51 @@ int main(void)
 
   //+++++++++++++++++++++++++++++++++ PID INITIALIZATION ++++++++++++++++++++++++++++++//
   // Y Axis
-  pid_vy.Kp = 1;			pid_vy.Ki = 0;				pid_vy.Kd = 0;
+  pid_vy.Kp = 2.3;			pid_vy.Ki = 1;				pid_vy.Kd = -0.0006;
   pid_vy.limMax = 500; 		pid_vy.limMin = -500; 		pid_vy.limMaxInt = 5; 	pid_vy.limMinInt = -5;
   pid_vy.T_sample = 0.01;
   PIDController_Init(&pid_vy);
 
   // X Axis
-  pid_vx.Kp = 1;			pid_vx.Ki = 0;				pid_vx.Kd = 0;
+  pid_vx.Kp = 2.3;			pid_vx.Ki = 1;				pid_vx.Kd = -0.0006;
   pid_vx.limMax = 500; 		pid_vx.limMin = -500; 		pid_vx.limMaxInt = 5; 	pid_vx.limMinInt = -5;
   pid_vx.T_sample = 0.01;
   PIDController_Init(&pid_vx);
 
-  // Orientation
-  pid_vt.Kp = 1;			pid_vt.Ki = 0;				pid_vt.Kd = 0;
+  // T Axis
+  pid_vt.Kp = 2.3;			pid_vt.Ki = 1;				pid_vt.Kd = -0.0006;
   pid_vt.limMax = 500; 		pid_vt.limMin = -500; 		pid_vt.limMaxInt = 5; 	pid_vt.limMinInt = -5;
   pid_vt.T_sample = 0.01;
   PIDController_Init(&pid_vt);
 
+  // Yaw Direction
+  pid_yaw.Kp = 1;			pid_yaw.Ki = 1;				pid_yaw.Kd = -0.0006;
+  pid_yaw.limMax = 180; 	pid_yaw.limMin = -180; 		pid_yaw.limMaxInt = 5; 	pid_yaw.limMinInt = -5;
+  pid_yaw.T_sample = 0.01;
+  PIDController_Init(&pid_yaw);
+
+  //+++++++++++++++++++++++++++++++++ Bluetooth INITIALIZATION ++++++++++++++++++++++++++++++//
+  HAL_UART_Receive_DMA(&huart1, rxBluetooth, sizeof(rxBluetooth));
+
   //+++++++++++++++++++++++++++++++++ BNO08X INITIALIZATION ++++++++++++++++++++++++++++++//
   BNO08X_Init(&huart6);
 
-//  agv_stop_all(motor_A, motor_B, motor_C);
-//  agv_inverse_kinematic(0, 200, 0, motor_A, motor_B, motor_C);
-//  HAL_Delay(2000);
-//  agv_reset_all(motor_A, motor_B, motor_C);
-//  agv_inverse_kinematic(0, -200, 0, motor_A, motor_B, motor_C);
-//  HAL_Delay(2000);
-//  agv_reset_all(motor_A, motor_B, motor_C);
-//  agv_inverse_kinematic(200, 0, 0, motor_A, motor_B, motor_C);
-//  HAL_Delay(2000);
-//  agv_reset_all(motor_A, motor_B, motor_C);
-//  agv_inverse_kinematic(-200, 0, 0, motor_A, motor_B, motor_C);
-//  HAL_Delay(2000);
-//  agv_reset_all(motor_A, motor_B, motor_C);
-//  agv_inverse_kinematic(0, 0, 200, motor_A, motor_B, motor_C);
-//  HAL_Delay(2000);
-//  agv_reset_all(motor_A, motor_B, motor_C);
-//  agv_inverse_kinematic(0, 0, -200, motor_A, motor_B, motor_C);
-//  HAL_Delay(2000);
-//  agv_reset_all(motor_A, motor_B, motor_C);
+  // Set Starting Yaw Point
+  while(is_started == 0);
+  BNO08X_Set_Init_Yaw(&BNO08X_sensor);
   /* USER CODE END 2 */
+
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  run_to_point(500,500,0,5);
-//	  agv_stop_all(motor_A, motor_B, motor_C);
-//	  agv_run_motor(motor_A, 200);
-//	  HAL_Delay(2000);
-//	  agv_stop_all(motor_A, motor_B, motor_C);
-//	  agv_run_motor(motor_B, 200);
-//	  HAL_Delay(2000);
-//	  agv_stop_all(motor_A, motor_B, motor_C);
-//	  agv_run_motor(motor_C, 200);
-//	  HAL_Delay(2000);
-//
-//	  agv_stop_all(motor_A, motor_B, motor_C);
-//	  agv_run_motor(motor_A, -500);
-//	  HAL_Delay(2000);
-//	  agv_stop_all(motor_A, motor_B, motor_C);
-//	  agv_run_motor(motor_B, -500);
-//	  HAL_Delay(2000);
-//	  agv_stop_all(motor_A, motor_B, motor_C);
-//	  agv_run_motor(motor_C, -500);
-//	  HAL_Delay(2000);
+	  // Set Heading
+	  handle_heading(0,5);
 
-//	agv_reset_all(motor_A, motor_B, motor_C);
-//	agv_inverse_kinematic(500, 500, 0, motor_A, motor_B, motor_C);
-//	HAL_Delay(2000);
+	  // Running Point
+//	  run_to_point(xdata,ydata,tdata,3);
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -742,7 +762,7 @@ static void MX_USART1_UART_Init(void)
 
   /* USER CODE END USART1_Init 1 */
   huart1.Instance = USART1;
-  huart1.Init.BaudRate = 115200;
+  huart1.Init.BaudRate = 9600;
   huart1.Init.WordLength = UART_WORDLENGTH_8B;
   huart1.Init.StopBits = UART_STOPBITS_1;
   huart1.Init.Parity = UART_PARITY_NONE;
@@ -789,6 +809,22 @@ static void MX_USART6_UART_Init(void)
   /* USER CODE BEGIN USART6_Init 2 */
 
   /* USER CODE END USART6_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA2_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA2_Stream2_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream2_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream2_IRQn);
 
 }
 
@@ -847,6 +883,7 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
 bool run_to_point(double sx, double sy, double st, double error){
 	if(abs(kinematic.Sx - sx) < error && abs(kinematic.Sy - sy) < error && abs(kinematic.St - st) < error){
 		agv_reset_all(motor_A, motor_B, motor_C);
@@ -863,6 +900,40 @@ bool run_to_point(double sx, double sy, double st, double error){
 	}
 
 }
+
+bool handle_heading(int16_t heading, int16_t error){
+	int16_t relative_reading = BNO08X_relative_yaw(BNO08X_sensor.setpoint_yaw, BNO08X_sensor.yaw);
+	if(abs(relative_reading - heading) < error){
+		agv_reset_all(motor_A, motor_B, motor_C);
+		agv_stop_all(motor_A, motor_B, motor_C);
+		return true;
+	}
+	else{
+		PIDController_Update(&pid_yaw, heading, relative_reading);
+		agv_reset_all(motor_A, motor_B, motor_C);
+		agv_inverse_kinematic(0, 0, pid_yaw.out, motor_A, motor_B, motor_C);
+		return false;
+	}
+}
+
+bool run_to_point_orientation(double sx, double sy, uint16_t heading, double error){
+	uint16_t relative_reading = BNO08X_relative_yaw(BNO08X_sensor.setpoint_yaw, BNO08X_sensor.yaw);
+	if(abs(kinematic.Sx - sx) < error && abs(kinematic.Sy - sy) < error && abs(relative_reading - heading) < error){
+		agv_reset_all(motor_A, motor_B, motor_C);
+		agv_stop_all(motor_A, motor_B, motor_C);
+		return true;
+	}
+	else{
+		PIDController_Update(&pid_vx, sx, kinematic.Sx);
+		PIDController_Update(&pid_vy, sy, kinematic.Sy);
+		PIDController_Update(&pid_yaw, heading, relative_reading);
+		agv_reset_all(motor_A, motor_B, motor_C);
+		agv_inverse_kinematic(pid_vx.out, pid_vy.out, pid_yaw.out, motor_A, motor_B, motor_C);
+		return false;
+	}
+
+}
+
 /* USER CODE END 4 */
 
 /**

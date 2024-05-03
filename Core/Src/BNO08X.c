@@ -32,3 +32,30 @@ void BNO08X_Init(UART_HandleTypeDef *huart_instance){
 	huart = *huart_instance;
 	HAL_UART_Receive_DMA(&huart, RX_Data, sizeof(RX_Data));
 }
+
+//////////////////////////////////// KINEMATIC FUNCTION ///////////////////////////////////////////
+void BNO08X_Set_Init_Yaw(BNO08X_Typedef *sensorData){
+	sensorData->setpoint_yaw = sensorData->yaw;
+}
+
+int16_t BNO08X_relative_yaw(int16_t current_position, int16_t reading){
+	if(current_position > 0){
+		if(reading > (-current_position)){
+			return (reading-current_position);
+		}
+		else{
+			return (reading + current_position + 180);
+		}
+	}
+	else if(current_position < 0){
+		if(reading > (-current_position)){
+			return (reading + current_position - 180);
+		}
+		else{
+			return (reading - current_position);
+		}
+	}
+	else{
+		return (reading);
+	}
+}
